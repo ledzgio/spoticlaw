@@ -1,12 +1,11 @@
 # Spoticlaw
-
 <p align="center">
-  <img src="assets/logo.jpg" width="200" alt="Spoticlaw Logo">
+  <img src="assets/logo.jpg" alt="SpotiClaw logo" width="400">
 </p>
 
-Lightweight Spotify Web API client for AI agents.
+<p align="center"><b>Lightweight Spotify Web API client for AI agents.</b></p>
 
-## Features
+## SpotiClaw Features
 
 - **No external dependencies** (uses direct HTTP requests)
 - **Automatic token refresh** — authenticate once, works forever
