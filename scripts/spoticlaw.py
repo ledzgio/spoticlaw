@@ -1,16 +1,8 @@
 """
-Spoticlaw - Spotify Web API Client
+Spoticlaw v2 - Spotify Web API Client using direct HTTP requests.
 
-A lightweight Spotify Web API client using direct HTTP requests.
-No external dependencies beyond requests and python-dotenv.
-
-Usage:
-    from spoticlaw import player, search, playlists, library
-    
-    player().play(uris=["spotify:track:..."])
-    search().query("coldplay", types=["track"])
-    playlists().get("playlist_id")
-    library().save(["spotify:track:..."])
+Implements all endpoints available as of Spotify's February 2026 API changes.
+Reference: https://developer.spotify.com/documentation/web-api
 """
 
 import os
@@ -18,18 +10,16 @@ import json
 import time
 from pathlib import Path
 from functools import lru_cache
-from typing import Any, Optional, List
+from typing import Any, Optional
 
 import requests
 from dotenv import load_dotenv
 
-# ============================================================================
-# Configuration
-# ============================================================================
-
+# Load .env
 _env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(_env_path)
 
+# Configuration
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
 REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback")
@@ -44,10 +34,11 @@ class SpotifyException(Exception):
 
 
 # ============================================================================
-# Token Management (with auto-refresh)
+# Token Management with Auto-Refresh
 # ============================================================================
 
 def _get_cache_path() -> Path:
+    """Get path to cache file."""
     return Path(__file__).parent.parent / CACHE_PATH
 
 
@@ -55,17 +46,7 @@ def _load_token_data() -> dict:
     """Load token data from cache."""
     cache_file = _get_cache_path()
     if not cache_file.exists():
-        raise SpotifyException(
-            "No Spotify token found.\n\n"
-            "To authenticate (do this on your LOCAL machine):\n"
-            "1. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env\n"
-            "2. Run: python scripts/auth.py\n"
-            "3. Open the URL and authorize\n"
-            "4. Copy .spotify_cache to this folder:\n"
-            "   Linux/Mac: cp ~/.spotify_cache .spotify_cache\n"
-            "   Windows: copy .spotify_cache (run from same folder)\n"
-            "Get credentials: https://developer.spotify.com/dashboard"
-        )
+        raise SpotifyException("No token. Re-authenticate: run auth.py")
     with open(cache_file) as f:
         return json.load(f)
 
@@ -80,60 +61,85 @@ def _save_token_data(data: dict) -> None:
 def _is_token_expired(token_data: dict) -> bool:
     """Check if token is expired."""
     expires_at = token_data.get("expires_at", 0)
-    return time.time() >= (expires_at - 60)  # 60s buffer
+    # Add 60 second buffer to be safe
+    return time.time() >= (expires_at - 60)
 
 
 def _refresh_token() -> str:
     """Refresh access token using refresh_token."""
-    import base64
-    
     token_data = _load_token_data()
     refresh_token = token_data.get("refresh_token")
     
     if not refresh_token:
-        raise SpotifyException("No refresh_token. Re-authenticate: python scripts/auth.py")
+        raise SpotifyException("No refresh_token. Re-authenticate: run auth.py")
     
+    # Encode client credentials
+    import base64
     auth_header = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
     
+    # Request new token
     resp = requests.post(
         "https://accounts.spotify.com/api/token",
-        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
-        headers={"Authorization": f"Basic {auth_header}", "Content-Type": "application/x-www-form-urlencoded"}
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        },
+        headers={
+            "Authorization": f"Basic {auth_header}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
     )
     
     if resp.status_code != 200:
-        raise SpotifyException(f"Token refresh failed: {resp.status_code}")
+        raise SpotifyException(f"Token refresh failed: {resp.status_code} - {resp.text}")
     
-    new_data = resp.json()
-    if "refresh_token" not in new_data:
-        new_data["refresh_token"] = refresh_token
-    new_data["expires_at"] = time.time() + new_data.get("expires_in", 3600)
-    _save_token_data(new_data)
-    return new_data.get("access_token")
+    new_token_data = resp.json()
+    
+    # Keep the old refresh_token if not returned
+    if "refresh_token" not in new_token_data:
+        new_token_data["refresh_token"] = refresh_token
+    
+    # Calculate expires_at
+    new_token_data["expires_at"] = time.time() + new_token_data.get("expires_in", 3600)
+    
+    # Save new token data
+    _save_token_data(new_token_data)
+    
+    print("🔄 Token refreshed automatically")
+    return new_token_data.get("access_token")
 
 
 def _get_token() -> str:
     """Get valid access token (auto-refreshes if expired)."""
     token_data = _load_token_data()
+    
+    # Check if token is expired and refresh if needed
     if _is_token_expired(token_data):
         return _refresh_token()
+    
     return token_data.get("access_token")
 
 
 def _headers() -> dict:
     """Get headers with auth."""
-    return {"Authorization": f"Bearer {_get_token()}", "Content-Type": "application/json"}
+    return {
+        "Authorization": f"Bearer {_get_token()}",
+        "Content-Type": "application/json",
+    }
 
 
 def get(endpoint: str, **params) -> dict:
     """GET request to Spotify API."""
     url = f"{BASE_URL}{endpoint}"
     resp = requests.get(url, headers=_headers(), params=params)
+    
+    # If unauthorized, try refreshing token once
     if resp.status_code == 401:
         _refresh_token()
         resp = requests.get(url, headers=_headers(), params=params)
+    
     if resp.status_code == 204:
-        return {}
+        return {}  # No content
     if resp.status_code not in (200, 201):
         raise SpotifyException(f"GET {endpoint}: {resp.status_code} - {resp.text}")
     return resp.json() if resp.text else {}
@@ -143,9 +149,12 @@ def post(endpoint: str, **payload) -> dict:
     """POST request to Spotify API."""
     url = f"{BASE_URL}{endpoint}"
     resp = requests.post(url, headers=_headers(), json=payload)
+    
+    # If unauthorized, try refreshing token once
     if resp.status_code == 401:
         _refresh_token()
         resp = requests.post(url, headers=_headers(), json=payload)
+    
     if resp.status_code not in (200, 201):
         raise SpotifyException(f"POST {endpoint}: {resp.status_code} - {resp.text}")
     return resp.json() if resp.text else {}
@@ -155,9 +164,12 @@ def put(endpoint: str, **payload) -> dict:
     """PUT request to Spotify API."""
     url = f"{BASE_URL}{endpoint}"
     resp = requests.put(url, headers=_headers(), json=payload)
+    
+    # If unauthorized, try refreshing token once
     if resp.status_code == 401:
         _refresh_token()
         resp = requests.put(url, headers=_headers(), json=payload)
+    
     if resp.status_code not in (200, 204):
         raise SpotifyException(f"PUT {endpoint}: {resp.status_code} - {resp.text}")
     return resp.json() if resp.text else {}
@@ -167,16 +179,19 @@ def delete(endpoint: str, **payload) -> dict:
     """DELETE request to Spotify API."""
     url = f"{BASE_URL}{endpoint}"
     resp = requests.delete(url, headers=_headers(), json=payload)
+    
+    # If unauthorized, try refreshing token once
     if resp.status_code == 401:
         _refresh_token()
         resp = requests.delete(url, headers=_headers(), json=payload)
+    
     if resp.status_code not in (200, 204):
         raise SpotifyException(f"DELETE {endpoint}: {resp.status_code} - {resp.text}")
     return resp.json() if resp.text else {}
 
 
 # ============================================================================
-# Core Endpoints
+# User Endpoints
 # ============================================================================
 
 class User:
@@ -188,8 +203,12 @@ class User:
         return get("/me")
 
 
+# ============================================================================
+# Library Endpoints (NEW /me/library API)
+# ============================================================================
+
 class Library:
-    """Library endpoints (unified /me/library API)."""
+    """Library endpoints."""
     
     @staticmethod
     def save(uris: list[str]) -> dict:
@@ -219,6 +238,10 @@ class Library:
         return resp.json()
 
 
+# ============================================================================
+# Playlist Endpoints
+# ============================================================================
+
 class Playlists:
     """Playlist endpoints."""
     
@@ -229,7 +252,7 @@ class Playlists:
     
     @staticmethod
     def get_items(playlist_id: str, limit: int = 50, offset: int = 0) -> dict:
-        """Get playlist items."""
+        """Get playlist items (tracks/episodes)."""
         return get(f"/playlists/{playlist_id}/items", limit=limit, offset=offset)
     
     @staticmethod
@@ -265,18 +288,36 @@ class Playlists:
     @staticmethod
     def remove_items(playlist_id: str, uris: list[str], snapshot_id: str = None) -> dict:
         """Remove items from playlist."""
-        payload = {"tracks": [{"uri": uri} for uri in uris]}
+        tracks = [{"uri": uri} for uri in uris]
+        payload = {"tracks": tracks}
         if snapshot_id:
             payload["snapshot_id"] = snapshot_id
         return delete(f"/playlists/{playlist_id}/items", **payload)
     
     @staticmethod
-    def delete(playlist_id: str) -> dict:
-        """Delete/unfollow playlist."""
-        url = f"{BASE_URL}/playlists/{playlist_id}/followers"
-        resp = requests.delete(url, headers=_headers())
-        if resp.status_code not in (200, 204):
-            raise SpotifyException(f"Delete playlist: {resp.status_code} - {resp.text}")
+    def update_items(playlist_id: str, range_start: int, insert_before: int, range_length: int = 1, snapshot_id: str = None) -> dict:
+        """Reorder items in playlist."""
+        payload = {
+            "range_start": range_start,
+            "insert_before": insert_before,
+            "range_length": range_length
+        }
+        if snapshot_id:
+            payload["snapshot_id"] = snapshot_id
+        return put(f"/playlists/{playlist_id}/items", **payload)
+    
+    @staticmethod
+    def replace_items(playlist_id: str, uris: list[str]) -> dict:
+        """Replace all items in playlist."""
+        return put(f"/playlists/{playlist_id}/items", uris=uris)
+    
+    @staticmethod
+    def upload_cover(playlist_id: str, image_base64: str) -> dict:
+        """Upload custom playlist cover image."""
+        url = f"{BASE_URL}/playlists/{playlist_id}/images"
+        resp = requests.put(url, headers={"Authorization": f"Bearer {_get_token()}", "Content-Type": "image/jpeg"}, data=image_base64)
+        if resp.status_code not in (200, 201):
+            raise SpotifyException(f"Upload cover: {resp.status_code} - {resp.text}")
         return {}
 
 
@@ -288,6 +329,10 @@ class UserPlaylists:
         """Get current user's playlists."""
         return get("/me/playlists", limit=limit, offset=offset)
 
+
+# ============================================================================
+# Player Endpoints
+# ============================================================================
 
 class Player:
     """Player endpoints."""
@@ -318,7 +363,7 @@ class Player:
         return get("/me/player/queue")
     
     @staticmethod
-    def play(device_id: str = None, context_uri: str = None, uris: list[str] = None, offset: int = 0) -> dict:
+    def play(device_id: str = None, context_uri: str = None, uris: list[str] = None, offset: int = 0, position_ms: int = 0) -> dict:
         """Start/resume playback."""
         payload = {}
         if context_uri:
@@ -326,6 +371,9 @@ class Player:
             payload["offset"] = {"position": offset}
         if uris:
             payload["uris"] = uris
+        if position_ms:
+            payload["position_ms"] = position_ms
+        
         params = f"?device_id={device_id}" if device_id else ""
         return put(f"/me/player/play{params}", **payload)
     
@@ -393,24 +441,31 @@ class Player:
         return put("/me/player", device_ids=[device_id], play=play)
 
 
+# ============================================================================
+# Search Endpoints
+# ============================================================================
+
 class Search:
     """Search endpoint."""
     
     @staticmethod
-    def query(q: str, types: list[str] = None, limit: int = 10, offset: int = 0) -> dict:
+    def query(q: str, types: list[str], market: str = None, limit: int = 10, offset: int = 0) -> dict:
         """
         Search for items.
         
         Args:
             q: Search query.
             types: List of types: track, artist, album, playlist, show, episode, audiobook.
+            market: Country code.
             limit: Max results (1-10).
             offset: Pagination offset.
         """
-        if types is None:
-            types = ["track"]
-        return get("/search", q=q, type=",".join(types), limit=limit, offset=offset)
+        return get("/search", q=q, type=",".join(types), market=market, limit=limit, offset=offset)
 
+
+# ============================================================================
+# Track Endpoints
+# ============================================================================
 
 class Tracks:
     """Track endpoints."""
@@ -426,6 +481,10 @@ class Tracks:
         return get("/tracks", ids=",".join(ids))
 
 
+# ============================================================================
+# Artist Endpoints
+# ============================================================================
+
 class Artists:
     """Artist endpoints."""
     
@@ -435,13 +494,24 @@ class Artists:
         return get(f"/artists/{artist_id}")
     
     @staticmethod
-    def get_albums(artist_id: str, include_groups: str = None, limit: int = 10, offset: int = 0) -> dict:
+    def get_multiple(ids: list[str]) -> dict:
+        """Get multiple artists."""
+        return get("/artists", ids=",".join(ids))
+    
+    @staticmethod
+    def get_albums(artist_id: str, include_groups: str = None, market: str = None, limit: int = 20, offset: int = 0) -> dict:
         """Get artist's albums."""
         params = {"limit": limit, "offset": offset}
         if include_groups:
             params["include_groups"] = include_groups
+        if market:
+            params["market"] = market
         return get(f"/artists/{artist_id}/albums", **params)
 
+
+# ============================================================================
+# Album Endpoints
+# ============================================================================
 
 class Albums:
     """Album endpoints."""
@@ -452,10 +522,19 @@ class Albums:
         return get(f"/albums/{album_id}")
     
     @staticmethod
+    def get_multiple(ids: list[str]) -> dict:
+        """Get multiple albums."""
+        return get("/albums", ids=",".join(ids))
+    
+    @staticmethod
     def get_tracks(album_id: str, limit: int = 50, offset: int = 0) -> dict:
         """Get album tracks."""
         return get(f"/albums/{album_id}/tracks", limit=limit, offset=offset)
 
+
+# ============================================================================
+# Show Endpoints (Podcasts)
+# ============================================================================
 
 class Shows:
     """Podcast show endpoints."""
@@ -466,10 +545,19 @@ class Shows:
         return get(f"/shows/{show_id}")
     
     @staticmethod
+    def get_multiple(ids: list[str]) -> dict:
+        """Get multiple shows."""
+        return get("/shows", ids=",".join(ids))
+    
+    @staticmethod
     def get_episodes(show_id: str, limit: int = 50, offset: int = 0) -> dict:
         """Get show episodes."""
         return get(f"/shows/{show_id}/episodes", limit=limit, offset=offset)
 
+
+# ============================================================================
+# Episode Endpoints (Podcasts)
+# ============================================================================
 
 class Episodes:
     """Podcast episode endpoints."""
@@ -478,7 +566,52 @@ class Episodes:
     def get(episode_id: str) -> dict:
         """Get episode details."""
         return get(f"/episodes/{episode_id}")
+    
+    @staticmethod
+    def get_multiple(ids: list[str]) -> dict:
+        """Get multiple episodes."""
+        return get("/episodes", ids=",".join(ids))
 
+
+# ============================================================================
+# Audiobook Endpoints
+# ============================================================================
+
+class Audiobooks:
+    """Audiobook endpoints."""
+    
+    @staticmethod
+    def get(audiobook_id: str) -> dict:
+        """Get audiobook details."""
+        return get(f"/audiobooks/{audiobook_id}")
+    
+    @staticmethod
+    def get_multiple(ids: list[str]) -> dict:
+        """Get multiple audiobooks."""
+        return get("/audiobooks", ids=",".join(ids))
+    
+    @staticmethod
+    def get_chapters(audiobook_id: str, limit: int = 50, offset: int = 0) -> dict:
+        """Get audiobook chapters."""
+        return get(f"/audiobooks/{audiobook_id}/chapters", limit=limit, offset=offset)
+
+
+# ============================================================================
+# Chapter Endpoints
+# ============================================================================
+
+class Chapters:
+    """Chapter endpoints."""
+    
+    @staticmethod
+    def get(chapter_id: str) -> dict:
+        """Get chapter details."""
+        return get(f"/chapters/{chapter_id}")
+
+
+# ============================================================================
+# Follow Endpoints
+# ============================================================================
 
 class Follow:
     """Follow endpoints."""
@@ -492,6 +625,10 @@ class Follow:
         return get("/me/following", **params)
 
 
+# ============================================================================
+# Personalisation Endpoints
+# ============================================================================
+
 class Personalisation:
     """Personalisation endpoints."""
     
@@ -502,7 +639,7 @@ class Personalisation:
 
 
 # ============================================================================
-# Convenience Functions (Main API)
+# Convenience Functions
 # ============================================================================
 
 @lru_cache(maxsize=1)
@@ -561,6 +698,16 @@ def episodes() -> Episodes:
 
 
 @lru_cache(maxsize=1)
+def audiobooks() -> Audiobooks:
+    return Audiobooks()
+
+
+@lru_cache(maxsize=1)
+def chapters() -> Chapters:
+    return Chapters()
+
+
+@lru_cache(maxsize=1)
 def follow() -> Follow:
     return Follow()
 
@@ -584,6 +731,8 @@ __all__ = [
     "albums",
     "shows",
     "episodes",
+    "audiobooks",
+    "chapters",
     "follow",
     "personalisation",
 ]
