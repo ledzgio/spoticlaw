@@ -22,7 +22,7 @@ load_dotenv(_env_path)
 # Configuration
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
-REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback")
+REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
 CACHE_PATH = os.getenv("SPOTIFY_CACHE_PATH", ".spotify_cache")
 
 BASE_URL = "https://api.spotify.com/v1"

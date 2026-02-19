@@ -56,13 +56,13 @@ python -c "from spoticlaw import player; player().play(...)"
 
 1. Create a Spotify app at https://developer.spotify.com/dashboard
 2. Get `CLIENT_ID` and `CLIENT_SECRET`
-3. Add `http://localhost:8888/callback` as Redirect URI
+3. Add `http://127.0.0.1:8888/callback` as Redirect URI
 4. Create `.env` file in your LOCAL machine:
 
 ```
 SPOTIFY_CLIENT_ID=your_client_id
 SPOTIFY_CLIENT_SECRET=your_client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
 ```
 
 5. Run authentication on your LOCAL machine:
