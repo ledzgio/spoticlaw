@@ -27,10 +27,17 @@ The primitives are designed to be combined in endless ways for any Spotify autom
 
 ## Setup
 
-1. Install dependencies:
+1. Install dependencies (recommended: use virtual environment):
 ```bash
-cd skills/spoticlaw/scripts
-pip install -r requirements.txt
+cd skills/spoticlaw
+
+# Create venv (recommended)
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate   # Windows
+
+# Install dependencies
+pip install -r scripts/requirements.txt
 ```
 
 2. Configure Spotify credentials:
@@ -43,7 +50,7 @@ cp .env.example .env
 
 4. Authenticate:
 ```bash
-python auth.py
+python scripts/auth.py
 ```
 
 **That's it!** Token auto-refreshes — no need to re-authenticate.
@@ -51,6 +58,9 @@ python auth.py
 ## Quick Usage
 
 ```python
+import sys
+sys.path.insert(0, "skills/spoticlaw/scripts")
+
 from spoticlaw import player, search, playlists, library
 
 # Search
