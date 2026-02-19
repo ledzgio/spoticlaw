@@ -1,5 +1,9 @@
 # Spoticlaw
 
+<p align="center">
+  <img src="assets/logo.jpg" width="200" alt="Spoticlaw Logo">
+</p>
+
 Lightweight Spotify Web API client for AI agents.
 
 ## Features
