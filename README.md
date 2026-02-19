@@ -32,7 +32,7 @@ The primitives are designed to be combined in endless ways for any Spotify autom
 
 **One-line install:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ledzgio/spoticlaw/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ledzgio/spoticlaw/master/install.sh | bash
 ```
 
 Or manually:
