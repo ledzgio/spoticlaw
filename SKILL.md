@@ -1,15 +1,7 @@
 ---
 name: spoticlaw
-description: |
-  Spotify Web API client for Nyx agents. Use when interacting with Spotify for: 
-  (1) Searching tracks, artists, albums, playlists, shows, podcasts
-  (2) Playback control: play, pause, skip, seek, volume, shuffle, repeat
-  (3) Playlist management: create, update, add/remove tracks, delete
-  (4) Library management: save/remove tracks, check if saved
-  (5) Getting user info, top tracks, followed artists
-  (6) Playing podcasts, shows, episodes
-  (7) Transferring playback between devices
-  (8) Getting queue, recently played
+description: Spotify Web API client for Nyx agents. Use when interacting with Spotify: search, playback, playlists, library, tracks, artists, albums, shows, podcasts.
+metadata: {"openclaw": {"homepage": "https://github.com/ledzgio/spoticlaw"}}
 ---
 
 # Spoticlaw - Spotify Web API Client
