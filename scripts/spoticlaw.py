@@ -148,13 +148,15 @@ def get(endpoint: str, **params) -> dict:
 def post(endpoint: str, **payload) -> dict:
     """POST request to Spotify API."""
     url = f"{BASE_URL}{endpoint}"
-    resp = requests.post(url, headers=_headers(), json=payload)
+    resp = requests.post(url, headers=_headers(), json=payload if payload else None)
     
     # If unauthorized, try refreshing token once
     if resp.status_code == 401:
         _refresh_token()
-        resp = requests.post(url, headers=_headers(), json=payload)
+        resp = requests.post(url, headers=_headers(), json=payload if payload else None)
     
+    if resp.status_code == 204 or resp.status_code == 200:
+        return {}  # No content or empty success response
     if resp.status_code not in (200, 201):
         raise SpotifyException(f"POST {endpoint}: {resp.status_code} - {resp.text}")
     return resp.json() if resp.text else {}
@@ -163,13 +165,15 @@ def post(endpoint: str, **payload) -> dict:
 def put(endpoint: str, **payload) -> dict:
     """PUT request to Spotify API."""
     url = f"{BASE_URL}{endpoint}"
-    resp = requests.put(url, headers=_headers(), json=payload)
+    resp = requests.put(url, headers=_headers(), json=payload if payload else None)
     
     # If unauthorized, try refreshing token once
     if resp.status_code == 401:
         _refresh_token()
-        resp = requests.put(url, headers=_headers(), json=payload)
+        resp = requests.put(url, headers=_headers(), json=payload if payload else None)
     
+    if resp.status_code == 204 or resp.status_code == 200:
+        return {}  # No content or empty success response
     if resp.status_code not in (200, 204):
         raise SpotifyException(f"PUT {endpoint}: {resp.status_code} - {resp.text}")
     return resp.json() if resp.text else {}
@@ -433,7 +437,21 @@ class Player:
         params = f"uri={uri}"
         if device_id:
             params += f"&device_id={device_id}"
-        return post(f"/me/player/queue?{params}")
+        
+        # Queue endpoint returns 204 with empty body - use direct request
+        url = f"{BASE_URL}/me/player/queue?{params}"
+        resp = requests.post(url, headers=_headers())
+        
+        # If unauthorized, try refreshing token once
+        if resp.status_code == 401:
+            _refresh_token()
+            resp = requests.post(url, headers=_headers())
+        
+        if resp.status_code == 204 or resp.status_code == 200:
+            return {}
+        if resp.status_code not in (200, 201):
+            raise SpotifyException(f"add_to_queue: {resp.status_code} - {resp.text}")
+        return resp.json() if resp.text else {}
     
     @staticmethod
     def transfer(device_id: str, play: bool = True) -> dict:
