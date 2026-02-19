@@ -28,7 +28,23 @@ playlists().add_items(pl["id"], track_uris)
 
 The primitives are designed to be combined in endless ways for any Spotify automation task.
 
+## Quick Install
+
+**One-line install:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/ledzgio/spoticlaw/main/install.sh | bash
+```
+
+Or manually:
+```bash
+git clone https://github.com/ledzgio/spoticlaw.git
+cd spoticlaw
+./install.sh
+```
+
 ## Setup
+
+**Manual step-by-step:**
 
 1. Install dependencies (recommended: use virtual environment):
 ```bash
