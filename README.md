@@ -54,21 +54,21 @@ cp .env.example .env
    - Get `Client ID` and `Client Secret`
    - Add `http://127.0.0.1:8888/callback` as Redirect URI in app settings
 
-4. Authenticate:
+4. Authenticate (run on your local machine/desktop):
 ```bash
 python scripts/auth.py
 ```
 
 5. Copy the token file to the skill folder:
-```bash
-# Linux/Mac (from the folder where auth.py created .spotify_cache)
-cp .spotify_cache /path/to/skills/spoticlaw/.spotify_cache
-
-# Or if running remotely, copy via scp, USB, etc.
-scp .spotify_cache user@agent:/path/to/skills/spoticlaw/.spotify_cache
-```
 
 **Important:** The token file never passes through the AI - it's copied manually for security.
+
+```bash
+# If running locally (same machine):
+cp .spotify_cache /path/to/skills/spoticlaw/.spotify_cache
+
+# If running on a remote server, do auth first on your desktop, then copy via scp, USB, etc.
+```
 
 **That's it!** Token auto-refreshes — no need to re-authenticate.
 
