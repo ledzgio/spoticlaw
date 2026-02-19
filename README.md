@@ -47,6 +47,9 @@ cp .env.example .env
 ```
 
 3. Get credentials from https://developer.spotify.com/dashboard
+   - Create a new app
+   - Get `Client ID` and `Client Secret`
+   - Add `http://127.0.0.1:8888/callback` as Redirect URI in app settings
 
 4. Authenticate:
 ```bash
