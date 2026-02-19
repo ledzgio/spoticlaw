@@ -56,6 +56,17 @@ cp .env.example .env
 python scripts/auth.py
 ```
 
+5. Copy the token file to the skill folder:
+```bash
+# Linux/Mac (from the folder where auth.py created .spotify_cache)
+cp .spotify_cache /path/to/skills/spoticlaw/.spotify_cache
+
+# Or if running remotely, copy via scp, USB, etc.
+scp .spotify_cache user@agent:/path/to/skills/spoticlaw/.spotify_cache
+```
+
+**Important:** The token file never passes through the AI - it's copied manually for security.
+
 **That's it!** Token auto-refreshes — no need to re-authenticate.
 
 ## Quick Usage
