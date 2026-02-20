@@ -223,6 +223,8 @@ user_playlists().get(limit=50)
 playlists().get("playlist_id")
 
 # Get playlist tracks
+# Note: Each item has 'item' key (not 'track'), e.g. item['item']['name']
+# Also can contain episodes (podcasts), not just tracks
 playlists().get_items("playlist_id", limit=50)
 
 # Create playlist
