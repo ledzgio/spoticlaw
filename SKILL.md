@@ -1,7 +1,8 @@
 ---
 name: spoticlaw
 description: Spotify Web API client for Nyx agents. Use when interacting with Spotify: search, playback, playlists, library, tracks, artists, albums, shows, podcasts. Requires SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI, and a local .spotify_cache token file.
-metadata: {"openclaw":{"homepage":"https://github.com/ledzgio/spoticlaw"},"requirements":{"env":["SPOTIFY_CLIENT_ID","SPOTIFY_CLIENT_SECRET","SPOTIFY_REDIRECT_URI"],"files":[".spotify_cache"]},"security":{"notes":"Providing .env and .spotify_cache grants Spotify account access to the agent; use isolated environments and least-privilege app scopes."}}
+homepage: https://github.com/ledzgio/spoticlaw
+metadata: {"clawdbot":{"emoji":"🎵","requires":{"env":["SPOTIFY_CLIENT_ID","SPOTIFY_CLIENT_SECRET","SPOTIFY_REDIRECT_URI"],"files":[".spotify_cache"]},"primaryEnv":"SPOTIFY_CLIENT_ID"}}
 ---
 
 # Spoticlaw - Spotify Web API Client
