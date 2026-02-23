@@ -1,7 +1,7 @@
 ---
 name: spoticlaw
 description: Spotify Web API client for Nyx agents. Use when interacting with Spotify: search, playback, playlists, library, tracks, artists, albums, shows, podcasts.
-metadata: {"openclaw": {"homepage": "https://github.com/ledzgio/spoticlaw"}}
+metadata: {"openclaw":{"homepage":"https://github.com/ledzgio/spoticlaw"},"requirements":{"env":["SPOTIFY_CLIENT_ID","SPOTIFY_CLIENT_SECRET","SPOTIFY_REDIRECT_URI"],"files":[".spotify_cache"]},"security":{"notes":"Providing .env and .spotify_cache grants Spotify account access to the agent; use isolated environments and least-privilege app scopes."}}
 ---
 
 # Spoticlaw - Spotify Web API Client
@@ -39,6 +39,16 @@ Or run from the scripts directory:
 cd skills/spoticlaw/scripts
 python -c "from spoticlaw import player; player().play(...)"
 ```
+
+## Required Configuration
+
+Required env vars in agent runtime:
+- `SPOTIFY_CLIENT_ID`
+- `SPOTIFY_CLIENT_SECRET`
+- `SPOTIFY_REDIRECT_URI` (recommended: `http://127.0.0.1:8888/callback`)
+
+Required file:
+- `.spotify_cache` (OAuth token cache)
 
 ## Authentication
 
@@ -81,12 +91,13 @@ scp .spotify_cache user@agent:/path/to/skills/spoticlaw/.spotify_cache
 
 ### Token Auto-Refresh
 
-The library automatically handles token refresh:
+The library automatically handles token refresh **only if the agent has the same app credentials in `.env`**:
 
-- Access token expires after 1 hour
-- On first API call after expiry, it uses the `refresh_token` to get a new access token
-- **No user interaction required** — works silently in the background
-- If you get an error, just run `python auth.py` again to re-authorize
+- Access token expires after ~1 hour
+- On first API call after expiry, it uses `refresh_token` + client credentials to request a new access token
+- Requires `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in the agent environment
+- If `.spotify_cache` exists but `.env` is missing/mismatched, refresh fails (`invalid_client`)
+- If you get an error, run `python auth.py` locally again and copy updated `.spotify_cache`
 
 For more on Spotify's OAuth flow, see: https://developer.spotify.com/documentation/web-api/tutorials/code-flow
 

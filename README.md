@@ -100,12 +100,15 @@ library().save(["spotify:track:..."])
 
 ## Token Refresh
 
-The library automatically refreshes your access token when it expires (every 60 minutes). No user interaction needed after initial authentication.
+The library automatically refreshes your access token when it expires (~60 minutes), **but only if the agent has matching app credentials** (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`) in `.env`.
 
-If you get a token error, re-run:
+If `.spotify_cache` exists but `.env` is missing or mismatched, refresh will fail with `invalid_client`.
+
+If you get a token error, re-run locally:
 ```bash
-python auth.py
+python scripts/auth.py
 ```
+and copy the updated `.spotify_cache` to the agent skill folder.
 
 ## Requirements
 
