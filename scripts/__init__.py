@@ -15,6 +15,7 @@ from .spoticlaw import (
     episodes,
     follow,
     personalisation,
+    memory_add_song,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "episodes",
     "follow",
     "personalisation",
+    "memory_add_song",
 ]

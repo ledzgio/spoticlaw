@@ -15,6 +15,11 @@ from typing import Any, Optional
 import requests
 from dotenv import load_dotenv
 
+try:
+    from .memory import load_memory, save_memory, record_play, get_recent_plays
+except Exception:
+    from memory import load_memory, save_memory, record_play, get_recent_plays  # type: ignore
+
 # Load .env
 _env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(_env_path)
@@ -31,6 +36,33 @@ BASE_URL = "https://api.spotify.com/v1"
 class SpotifyException(Exception):
     """Spotify API exception."""
     pass
+
+
+def _memory_record_play_safe(
+    track_uri: str,
+    artist_uri: str | None = None,
+    album_uri: str | None = None,
+    track_name: str | None = None,
+    artist_name: str | None = None,
+    album_name: str | None = None,
+    source: str = "unknown",
+) -> None:
+    """Best-effort memory logging; never breaks playback."""
+    try:
+        mem = load_memory()
+        record_play(
+            mem,
+            track_uri=track_uri,
+            artist_uri=artist_uri,
+            album_uri=album_uri,
+            track_name=track_name,
+            artist_name=artist_name,
+            album_name=album_name,
+            source=source,
+        )
+        save_memory(mem)
+    except Exception:
+        pass
 
 
 # ============================================================================
@@ -379,7 +411,16 @@ class Player:
             payload["position_ms"] = position_ms
         
         params = f"?device_id={device_id}" if device_id else ""
-        return put(f"/me/player/play{params}", **payload)
+        out = put(f"/me/player/play{params}", **payload)
+
+        # best-effort memory log for direct-track play calls
+        try:
+            if uris and len(uris) > 0:
+                _memory_record_play_safe(track_uri=uris[0], source="play")
+        except Exception:
+            pass
+
+        return out
     
     @staticmethod
     def pause(device_id: str = None) -> dict:
@@ -448,6 +489,7 @@ class Player:
             resp = requests.post(url, headers=_headers())
         
         if resp.status_code == 204 or resp.status_code == 200:
+            _memory_record_play_safe(track_uri=uri, source="add_to_queue")
             return {}
         if resp.status_code not in (200, 201):
             raise SpotifyException(f"add_to_queue: {resp.status_code} - {resp.text}")
@@ -735,6 +777,35 @@ def personalisation() -> Personalisation:
     return Personalisation()
 
 
+def memory_add_song(
+    track_uri: str,
+    artist_uri: str | None = None,
+    album_uri: str | None = None,
+    track_name: str | None = None,
+    artist_name: str | None = None,
+    album_name: str | None = None,
+    source: str = "manual",
+) -> dict:
+    """Manually append a song event to play-history memory."""
+    mem = load_memory()
+    record_play(
+        mem,
+        track_uri=track_uri,
+        artist_uri=artist_uri,
+        album_uri=album_uri,
+        track_name=track_name,
+        artist_name=artist_name,
+        album_name=album_name,
+        source=source,
+    )
+    save_memory(mem)
+    plays = get_recent_plays(mem, limit=1)
+    return {
+        "ok": True,
+        "event": plays[-1] if plays else None,
+    }
+
+
 # Export all
 __all__ = [
     "SpotifyException",
@@ -753,4 +824,5 @@ __all__ = [
     "chapters",
     "follow",
     "personalisation",
+    "memory_add_song",
 ]
