@@ -116,6 +116,49 @@ and copy the updated `.spotify_cache` to the agent skill folder.
 - requests
 - python-dotenv
 
+## Memory (Play History)
+
+Enable/disable in `.env`:
+```bash
+MEMORY_ENABLED=true  # default
+MEMORY_ENABLED=false  # disable
+```
+
+```python
+from spoticlaw import memory_add_song, player
+
+# Manual add
+memory_add_song("spotify:track:...", source="manual")
+
+# Auto-logged on play/queue
+player().play(uris=["spotify:track:..."])
+player().add_to_queue("spotify:track:...")
+```
+
+Storage: `~/.spoticlaw/music_memory.json`
+
+## Discovery (Last.fm)
+
+Get a free API key from https://www.last.fm/api/account/create and add to `.env`:
+```bash
+LASTFM_API_KEY=your_api_key
+```
+
+```python
+from spoticlaw import discover_similar_artists, discover_similar_tracks, discover_similar_genres
+
+# Similar artists
+discover_similar_artists("Modest Mouse", limit=10)
+
+# Similar tracks
+discover_similar_tracks("Dramamine", limit=10)
+
+# Browse by genre
+discover_similar_genres("jazz", limit=10)
+```
+
+All return Spotify IDs/URIs for immediate playback.
+
 ## License
 
 MIT

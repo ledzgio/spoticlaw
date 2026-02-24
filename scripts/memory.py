@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 DEFAULT_MEMORY_PATH = Path.home() / ".spoticlaw" / "music_memory.json"
+
+# Feature flag: set to "false" to disable memory logging
+MEMORY_ENABLED = os.environ.get("MEMORY_ENABLED", "true").lower() != "false"
 
 
 def utc_now_iso() -> str:
@@ -128,7 +132,7 @@ def record_play(
     album_name: str | None = None,
     source: str = "unknown",
 ) -> None:
-    if not track_uri:
+    if not MEMORY_ENABLED or not track_uri:
         return
 
     plays = memory.setdefault("plays", [])
@@ -155,3 +159,62 @@ def get_recent_plays(memory: dict[str, Any], limit: int = 20) -> list[dict[str, 
     if not isinstance(plays, list):
         return []
     return plays[-max(0, limit):]
+
+
+def enrich_play_entry(
+    entry: dict[str, Any],
+    lastfm_tags: list[str] | None = None,
+    similar_artists: list[str] | None = None,
+) -> dict[str, Any]:
+    """Add Last.fm enrichment data to a play entry."""
+    if not entry:
+        return entry
+    entry = dict(entry)
+    if lastfm_tags:
+        entry["lastfm_tags"] = lastfm_tags
+    if similar_artists:
+        entry["similar_artists"] = similar_artists
+    return entry
+
+
+def get_all_genres(memory: dict[str, Any], limit: int = 10) -> list[dict[str, Any]]:
+    """Get aggregated genre tags from play history.
+    
+    Returns list of {tag, count} sorted by count descending.
+    """
+    from collections import Counter
+    tags: list[str] = []
+    plays = memory.get("plays", [])
+    if not isinstance(plays, list):
+        return []
+    
+    for p in plays:
+        lt = p.get("lastfm_tags")
+        if isinstance(lt, list):
+            tags.extend(lt)
+    
+    if not tags:
+        return []
+    
+    counts = Counter(tags)
+    return [{"tag": t, "count": c} for t, c in counts.most_common(limit)]
+
+
+def get_history_artists(memory: dict[str, Any]) -> list[dict[str, Any]]:
+    """Get unique artists from play history with play counts."""
+    from collections import Counter
+    artists: list[str] = []
+    plays = memory.get("plays", [])
+    if not isinstance(plays, list):
+        return []
+    
+    for p in plays:
+        an = p.get("artist_name")
+        if an:
+            artists.append(an)
+    
+    if not artists:
+        return []
+    
+    counts = Counter(artists)
+    return [{"artist": a, "count": c} for a, c in counts.most_common()]

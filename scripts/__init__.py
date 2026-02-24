@@ -16,6 +16,11 @@ from .spoticlaw import (
     follow,
     personalisation,
     memory_add_song,
+    discover_similar_artists,
+    discover_similar_tracks,
+    discover_similar_genres,
+    get_history_genres,
+    discover_from_history,
 )
 
 __all__ = [
@@ -34,4 +39,9 @@ __all__ = [
     "follow",
     "personalisation",
     "memory_add_song",
+    "discover_similar_artists",
+    "discover_similar_tracks",
+    "discover_similar_genres",
+    "get_history_genres",
+    "discover_from_history",
 ]
