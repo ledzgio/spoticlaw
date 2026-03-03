@@ -582,12 +582,20 @@ MEMORY_ENABLED=true   # enable
 ### Usage
 
 ```python
-from spoticlaw import memory_add_song, player
+from spoticlaw import memory_add_song, memory_set_feedback, player
 
-# Manual add
-memory_add_song("spotify:track:...", source="manual")
+# Manual add/update (deduplicated by track_uri)
+memory_add_song(
+    "spotify:track:...",
+    source="manual",
+    user_rating=8,
+    mood_tags=["focus", "night"],
+)
 
-# Automatic: play() and add_to_queue() log automatically when successful
+# Update rating/tags later
+memory_set_feedback("spotify:track:...", user_rating=9, mood_tags=["chill"])
+
+# Automatic: play() and add_to_queue() update memory when successful
 player().play(uris=["spotify:track:..."])
 player().add_to_queue("spotify:track:...")
 ```
@@ -596,7 +604,8 @@ player().add_to_queue("spotify:track:...")
 
 - Location (default): `~/.spoticlaw/music_memory.json`
 - Override via `.env`: `MEMORY_FILE_PATH=~/.spoticlaw/music_memory.json`
-- Format: `{"version": "1.0-simple-log", "profile": {...}, "plays": [...]}`
+- Format: `{"version": "2.0-track-aggregate", "profile": {...}, "tracks": {"spotify:track:...": {...}}}`
+- Per-track fields include: `play_count`, `first_played_at`, `last_played_at`, optional `user_rating` (1-10), optional `mood_tags` (list[str]).
 
 ---
 

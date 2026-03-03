@@ -16,9 +16,9 @@ import requests
 from dotenv import load_dotenv
 
 try:
-    from .memory import load_memory, save_memory, record_play, get_recent_plays, get_all_genres, get_history_artists
+    from .memory import load_memory, save_memory, record_play, set_track_feedback, get_recent_plays, get_all_genres, get_history_artists
 except Exception:
-    from memory import load_memory, save_memory, record_play, get_recent_plays, get_all_genres, get_history_artists  # type: ignore
+    from memory import load_memory, save_memory, record_play, set_track_feedback, get_recent_plays, get_all_genres, get_history_artists  # type: ignore
 
 try:
     from .lastfm import get_similar_artists as _lfm_similar, get_artist_tags as _lfm_tags
@@ -61,16 +61,13 @@ def _memory_record_play_safe(
     enrich: bool = True,
 ) -> None:
     """Best-effort memory logging; never breaks playback.
-    
-    If enrich=True and LASTFM_API_KEY is available, also fetches and stores
-    Last.fm tags and similar artists for the artist.
+
+    If enrich=True and Last.fm is enabled, also stores Last.fm tags/similar artists
+    on the aggregated track record.
     """
     try:
         mem = load_memory()
-        
-        # Get existing play entry count to modify the last entry
-        plays_before = len(mem.get("plays", []))
-        
+
         record_play(
             mem,
             track_uri=track_uri,
@@ -81,26 +78,26 @@ def _memory_record_play_safe(
             album_name=album_name,
             source=source,
         )
-        
+
         # Enrich with Last.fm only when explicitly enabled and artist is known
         if enrich and LASTFM_ENABLED and _lfm_tags and artist_name:
             try:
                 tags_result = _lfm_tags(artist_name)
                 tags = [t.get("name") for t in tags_result.get("tags", [])[:5]]
-                
+
                 similar_result = _lfm_similar(artist_name, limit=5) if _lfm_similar else {}
                 similar = [s.get("name") for s in similar_result.get("similar", [])[:5]]
-                
-                # Update the last added play entry with enrichment data
-                if len(mem.get("plays", [])) > plays_before:
-                    last_play = mem["plays"][-1]
+
+                tracks = mem.get("tracks") if isinstance(mem.get("tracks"), dict) else {}
+                rec = tracks.get(track_uri) if isinstance(tracks, dict) else None
+                if isinstance(rec, dict):
                     if tags:
-                        last_play["lastfm_tags"] = tags
+                        rec["lastfm_tags"] = list(dict.fromkeys([str(x) for x in tags if x]))
                     if similar:
-                        last_play["similar_artists"] = similar
+                        rec["similar_artists"] = list(dict.fromkeys([str(x) for x in similar if x]))
             except Exception:
                 pass  # Best-effort enrichment
-        
+
         save_memory(mem)
     except Exception:
         pass
@@ -856,8 +853,10 @@ def memory_add_song(
     artist_name: str | None = None,
     album_name: str | None = None,
     source: str = "manual",
+    user_rating: int | None = None,
+    mood_tags: list[str] | None = None,
 ) -> dict:
-    """Manually append a song event to play-history memory."""
+    """Add/update an aggregated track memory record."""
     mem = load_memory()
     record_play(
         mem,
@@ -868,13 +867,29 @@ def memory_add_song(
         artist_name=artist_name,
         album_name=album_name,
         source=source,
+        user_rating=user_rating,
+        mood_tags=mood_tags,
     )
     save_memory(mem)
-    plays = get_recent_plays(mem, limit=1)
+    tracks = mem.get("tracks") if isinstance(mem.get("tracks"), dict) else {}
     return {
         "ok": True,
-        "event": plays[-1] if plays else None,
+        "track": tracks.get(track_uri) if isinstance(tracks, dict) else None,
     }
+
+
+def memory_set_feedback(track_uri: str, user_rating: int | None = None, mood_tags: list[str] | None = None) -> dict:
+    """Set explicit user feedback for a tracked song.
+
+    - user_rating: optional int 1..10
+    - mood_tags: optional list of string labels
+    """
+    mem = load_memory()
+    rec = set_track_feedback(mem, track_uri=track_uri, user_rating=user_rating, mood_tags=mood_tags)
+    if rec is None:
+        return {"ok": False, "reason": "track not found in memory"}
+    save_memory(mem)
+    return {"ok": True, "track": rec}
 
 
 def discover_similar_artists(seed_artist: str, limit: int = 10) -> dict:
