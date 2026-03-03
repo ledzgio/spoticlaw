@@ -15,6 +15,20 @@ from typing import Any, Optional
 import requests
 from dotenv import load_dotenv
 
+try:
+    from .memory import load_memory, save_memory, record_play, get_recent_plays, get_all_genres, get_history_artists
+except Exception:
+    from memory import load_memory, save_memory, record_play, get_recent_plays, get_all_genres, get_history_artists  # type: ignore
+
+try:
+    from .lastfm import get_similar_artists as _lfm_similar, get_artist_tags as _lfm_tags
+except Exception:
+    try:
+        from lastfm import get_similar_artists as _lfm_similar, get_artist_tags as _lfm_tags  # type: ignore
+    except Exception:
+        _lfm_similar = None
+        _lfm_tags = None
+
 # Load .env
 _env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(_env_path)
@@ -27,10 +41,69 @@ CACHE_PATH = os.getenv("SPOTIFY_CACHE_PATH", ".spotify_cache")
 
 BASE_URL = "https://api.spotify.com/v1"
 
+# Optional features are disabled by default unless explicitly enabled in .env
+LASTFM_ENABLED = os.getenv("LASTFM_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+
 
 class SpotifyException(Exception):
     """Spotify API exception."""
     pass
+
+
+def _memory_record_play_safe(
+    track_uri: str,
+    artist_uri: str | None = None,
+    album_uri: str | None = None,
+    track_name: str | None = None,
+    artist_name: str | None = None,
+    album_name: str | None = None,
+    source: str = "unknown",
+    enrich: bool = True,
+) -> None:
+    """Best-effort memory logging; never breaks playback.
+    
+    If enrich=True and LASTFM_API_KEY is available, also fetches and stores
+    Last.fm tags and similar artists for the artist.
+    """
+    try:
+        mem = load_memory()
+        
+        # Get existing play entry count to modify the last entry
+        plays_before = len(mem.get("plays", []))
+        
+        record_play(
+            mem,
+            track_uri=track_uri,
+            artist_uri=artist_uri,
+            album_uri=album_uri,
+            track_name=track_name,
+            artist_name=artist_name,
+            album_name=album_name,
+            source=source,
+        )
+        
+        # Enrich with Last.fm only when explicitly enabled and artist is known
+        if enrich and LASTFM_ENABLED and _lfm_tags and artist_name:
+            try:
+                tags_result = _lfm_tags(artist_name)
+                tags = [t.get("name") for t in tags_result.get("tags", [])[:5]]
+                
+                similar_result = _lfm_similar(artist_name, limit=5) if _lfm_similar else {}
+                similar = [s.get("name") for s in similar_result.get("similar", [])[:5]]
+                
+                # Update the last added play entry with enrichment data
+                if len(mem.get("plays", [])) > plays_before:
+                    last_play = mem["plays"][-1]
+                    if tags:
+                        last_play["lastfm_tags"] = tags
+                    if similar:
+                        last_play["similar_artists"] = similar
+            except Exception:
+                pass  # Best-effort enrichment
+        
+        save_memory(mem)
+    except Exception:
+        pass
 
 
 # ============================================================================
@@ -379,7 +452,31 @@ class Player:
             payload["position_ms"] = position_ms
         
         params = f"?device_id={device_id}" if device_id else ""
-        return put(f"/me/player/play{params}", **payload)
+        out = put(f"/me/player/play{params}", **payload)
+
+        # best-effort memory log for direct-track play calls (only if we got track details)
+        try:
+            if uris and len(uris) > 0:
+                track_uri = uris[0]
+                track_name = None
+                artist_name = None
+                if track_uri.startswith("spotify:track:"):
+                    tid = track_uri.split(":")[-1]
+                    try:
+                        t = tracks().get(tid)
+                        track_name = t.get("name")
+                        artists = t.get("artists") or []
+                        if artists:
+                            artist_name = artists[0].get("name")
+                    except Exception:
+                        pass
+                # Only log if we got track details
+                if track_name and artist_name:
+                    _memory_record_play_safe(track_uri=track_uri, track_name=track_name, artist_name=artist_name, source="play")
+        except Exception:
+            pass
+
+        return out
     
     @staticmethod
     def pause(device_id: str = None) -> dict:
@@ -448,6 +545,22 @@ class Player:
             resp = requests.post(url, headers=_headers())
         
         if resp.status_code == 204 or resp.status_code == 200:
+            # Try to get track details for enrichment (only log if we got them)
+            track_name = None
+            artist_name = None
+            if uri.startswith("spotify:track:"):
+                tid = uri.split(":")[-1]
+                try:
+                    t = tracks().get(tid)
+                    track_name = t.get("name")
+                    artists = t.get("artists") or []
+                    if artists:
+                        artist_name = artists[0].get("name")
+                except Exception:
+                    pass
+            # Only log if we got track details
+            if track_name and artist_name:
+                _memory_record_play_safe(track_uri=uri, track_name=track_name, artist_name=artist_name, source="add_to_queue")
             return {}
         if resp.status_code not in (200, 201):
             raise SpotifyException(f"add_to_queue: {resp.status_code} - {resp.text}")
@@ -735,22 +848,305 @@ def personalisation() -> Personalisation:
     return Personalisation()
 
 
-# Export all
-__all__ = [
-    "SpotifyException",
-    "user",
-    "library",
-    "playlists",
-    "user_playlists",
-    "player",
-    "search",
-    "tracks",
-    "artists",
-    "albums",
-    "shows",
-    "episodes",
-    "audiobooks",
-    "chapters",
-    "follow",
-    "personalisation",
-]
+def memory_add_song(
+    track_uri: str,
+    artist_uri: str | None = None,
+    album_uri: str | None = None,
+    track_name: str | None = None,
+    artist_name: str | None = None,
+    album_name: str | None = None,
+    source: str = "manual",
+) -> dict:
+    """Manually append a song event to play-history memory."""
+    mem = load_memory()
+    record_play(
+        mem,
+        track_uri=track_uri,
+        artist_uri=artist_uri,
+        album_uri=album_uri,
+        track_name=track_name,
+        artist_name=artist_name,
+        album_name=album_name,
+        source=source,
+    )
+    save_memory(mem)
+    plays = get_recent_plays(mem, limit=1)
+    return {
+        "ok": True,
+        "event": plays[-1] if plays else None,
+    }
+
+
+def discover_similar_artists(seed_artist: str, limit: int = 10) -> dict:
+    """Find similar artists using Last.fm API.
+
+    Args:
+        seed_artist: Artist name or Spotify ID
+        limit: Max artists to return
+
+    Returns:
+        {"seed": {...}, "artists": [...]}
+    """
+    if not LASTFM_ENABLED:
+        return {"seed": None, "artists": [], "reason": "LASTFM is disabled (set LASTFM_ENABLED=true)"}
+    if not _lfm_similar:
+        return {"seed": None, "artists": [], "reason": "LASTFM_API_KEY not configured"}
+
+    # Resolve seed artist
+    seed_obj = None
+    if len(seed_artist) == 22 and seed_artist.isalnum():
+        try:
+            seed_obj = artists().get(seed_artist)
+        except Exception:
+            seed_obj = None
+    if not seed_obj:
+        search_term = seed_artist.strip('"').strip("'")
+        res = search().query(search_term, types=["artist"], limit=5)
+        items = (res.get("artists") or {}).get("items") or []
+        if not items:
+            return {"seed": None, "artists": [], "reason": "Seed artist not found."}
+        search_lower = search_term.lower()
+        for item in items:
+            if item.get("name", "").lower() == search_lower:
+                seed_obj = item
+                break
+        if not seed_obj:
+            seed_obj = items[0]
+
+    seed_name = seed_obj.get("name")
+    seed_id = seed_obj.get("id")
+
+    # Get similar artists from Last.fm
+    lfm_result = _lfm_similar(seed_name, limit=limit)
+    similar = lfm_result.get("similar", []) if isinstance(lfm_result, dict) else []
+
+    if not similar:
+        return {"seed": {"id": seed_id, "name": seed_name}, "artists": [], "reason": "No similar artists found on Last.fm"}
+
+    # Get tags
+    tags_result = _lfm_tags(seed_name) if _lfm_tags else {}
+    seed_tags = [t.get("name") for t in tags_result.get("tags", [])[:5]]
+
+    result_artists = []
+    for item in similar[:limit]:
+        name = item.get("name", "")
+        match = float(item.get("match", 0))
+        spotify_id = None
+        spotify_pop = 0
+        try:
+            sres = search().query(name, types=["artist"], limit=1)
+            sitems = (sres.get("artists") or {}).get("items") or []
+            if sitems:
+                spotify_id = sitems[0].get("id")
+                spotify_pop = sitems[0].get("popularity", 0)
+        except Exception:
+            pass
+        result_artists.append({
+            "name": name,
+            "match": match,
+            "spotify_id": spotify_id,
+            "spotify_popularity": spotify_pop,
+        })
+
+    return {"seed": {"id": seed_id, "name": seed_name, "tags": seed_tags}, "artists": result_artists}
+
+
+def discover_similar_tracks(seed_track: str | None = None, limit: int = 20) -> dict:
+    """Find similar tracks using Last.fm API.
+
+    Args:
+        seed_track: Track name, or None for currently playing
+        limit: Max tracks to return
+
+    Returns:
+        {"seed": {...}, "tracks": [...]}
+    """
+    if not LASTFM_ENABLED:
+        return {"seed": None, "tracks": [], "reason": "LASTFM is disabled (set LASTFM_ENABLED=true)"}
+    if not _lfm_similar:
+        return {"seed": None, "tracks": [], "reason": "LASTFM_API_KEY not configured"}
+
+    # Resolve seed track
+    seed_track_obj = None
+    if seed_track:
+        if seed_track.startswith("spotify:track:"):
+            tid = seed_track.split(":")[-1]
+            try:
+                seed_track_obj = tracks().get(tid)
+            except Exception:
+                pass
+        if not seed_track_obj:
+            res = search().query(seed_track, types=["track"], limit=1)
+            items = (res.get("tracks") or {}).get("items") or []
+            if items:
+                seed_track_obj = items[0]
+    else:
+        current = player().get_currently_playing()
+        if current:
+            seed_track_obj = current.get("item")
+
+    if not seed_track_obj:
+        return {"seed": None, "tracks": [], "reason": "Seed track not found."}
+
+    seed_name = seed_track_obj.get("name")
+    seed_artists = seed_track_obj.get("artists") or []
+    seed_artist_name = (seed_artists[0].get("name") if seed_artists else "")
+
+    # Get similar tracks from Last.fm
+    try:
+        from . import lastfm as _lastfm_mod
+        sim_func = _lastfm_mod.get_similar_tracks
+    except Exception:
+        try:
+            from lastfm import get_similar_tracks as sim_func
+        except Exception:
+            return {"seed": None, "tracks": [], "reason": "Last.fm track similarity not available"}
+
+    sim_result = sim_func(seed_artist_name, seed_name, limit=limit)
+    similar = sim_result.get("similar", []) if isinstance(sim_result, dict) else []
+
+    if not similar:
+        return {"seed": {"name": seed_name, "artist": seed_artist_name}, "tracks": [], "reason": "No similar tracks found on Last.fm"}
+
+    result_tracks = []
+    for item in similar[:limit]:
+        name = item.get("name", "")
+        artist_name = item.get("artist", "")
+        match = float(item.get("match", 0))
+        spotify_id = None
+        spotify_uri = None
+        spotify_pop = 0
+        try:
+            sres = search().query(f"{artist_name} {name}", types=["track"], limit=3)
+            sitems = (sres.get("tracks") or {}).get("items") or []
+            for s in sitems:
+                s_artists = s.get("artists") or []
+                s_artist_name = (s_artists[0].get("name") if s_artists else "").lower()
+                if s_artist_name == artist_name.lower() or artist_name.lower() in s_artist_name:
+                    spotify_id = s.get("id")
+                    spotify_uri = s.get("uri")
+                    spotify_pop = s.get("popularity", 0)
+                    break
+        except Exception:
+            pass
+        result_tracks.append({
+            "name": name,
+            "artist": artist_name,
+            "match": match,
+            "spotify_id": spotify_id,
+            "spotify_uri": spotify_uri,
+            "spotify_popularity": spotify_pop,
+        })
+
+    return {"seed": {"name": seed_name, "artist": seed_artist_name}, "tracks": result_tracks}
+
+
+def discover_similar_genres(genre: str, limit: int = 20) -> dict:
+    """Find artists by genre/tag using Last.fm.
+
+    Args:
+        genre: Genre/tag name (e.g., "math rock", "jazz", "post-punk")
+        limit: Max artists to return
+
+    Returns:
+        {"genre": "...", "artists": [...]}
+    """
+    if not LASTFM_ENABLED:
+        return {"genre": genre, "artists": [], "reason": "LASTFM is disabled (set LASTFM_ENABLED=true)"}
+    try:
+        from . import lastfm as _lastfm_mod
+    except Exception:
+        try:
+            from lastfm import search_by_tag as _search_by_tag
+        except Exception:
+            return {"genre": genre, "artists": [], "reason": "LASTFM_API_KEY not configured"}
+
+    artists = _search_by_tag(genre, limit=limit)
+    return {"genre": genre, "artists": artists}
+
+
+def get_history_genres(limit: int = 10) -> dict:
+    """Get aggregated genre tags from your play history.
+
+    Requires:
+    - MEMORY_ENABLED=true in .env
+    - LASTFM_ENABLED=true and LASTFM_API_KEY configured (for auto-enrichment)
+
+    Returns:
+        {"genres": [{"tag": "indie rock", "count": 15}, ...]}
+    """
+    try:
+        mem = load_memory()
+        genres = get_all_genres(mem, limit=limit)
+        return {"genres": genres}
+    except Exception as e:
+        return {"genres": [], "error": str(e)}
+
+
+def discover_from_history(limit: int = 10) -> dict:
+    """Discover similar artists based on your play history.
+
+    Uses your most-played artists from memory + Last.fm similarity.
+
+    Requires:
+    - MEMORY_ENABLED=true in .env
+    - LASTFM_ENABLED=true and LASTFM_API_KEY configured
+
+    Returns:
+        {"seed": {"top_artists": [...]}, "suggested": [...]}
+    """
+    if not LASTFM_ENABLED:
+        return {"suggested": [], "reason": "LASTFM is disabled (set LASTFM_ENABLED=true)"}
+    if not _lfm_similar:
+        return {"suggested": [], "reason": "LASTFM_API_KEY not configured"}
+
+    try:
+        mem = load_memory()
+        
+        # Get most played artists from history
+        artist_plays = get_history_artists(mem)
+        if not artist_plays:
+            return {"suggested": [], "reason": "No play history found"}
+        
+        # Take top artists by play count
+        top_artists = [a["artist"] for a in artist_plays[:5]]
+        
+        # For each top artist, get similar from Last.fm
+        all_similar = []
+        seen = set()
+        
+        for artist_name in top_artists:
+            try:
+                result = _lfm_similar(artist_name, limit=5)
+                similar = result.get("similar", []) if isinstance(result, dict) else []
+                for s in similar:
+                    name = s.get("name")
+                    if name and name not in seen:
+                        seen.add(name)
+                        # Try to find in Spotify
+                        spotify_id = None
+                        try:
+                            sres = search().query(name, types=["artist"], limit=1)
+                            sitems = (sres.get("artists") or {}).get("items") or []
+                            if sitems:
+                                spotify_id = sitems[0].get("id")
+                        except Exception:
+                            pass
+                        all_similar.append({
+                            "name": name,
+                            "match": s.get("match"),
+                            "based_on": artist_name,
+                            "spotify_id": spotify_id,
+                        })
+            except Exception:
+                continue
+        
+        # Sort by match score
+        all_similar.sort(key=lambda x: float(x.get("match", 0)), reverse=True)
+        
+        return {
+            "seed": {"top_artists": top_artists},
+            "suggested": all_similar[:limit],
+        }
+    except Exception as e:
+        return {"suggested": [], "error": str(e)}

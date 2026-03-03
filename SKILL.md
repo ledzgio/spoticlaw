@@ -100,6 +100,15 @@ The library automatically handles token refresh **only if the agent has the same
 - If `.spotify_cache` exists but `.env` is missing/mismatched, refresh fails (`invalid_client`)
 - If you get an error, run `python auth.py` locally again and copy updated `.spotify_cache`
 
+### Quick self-check (no extra dependencies)
+
+```bash
+python scripts/selfcheck.py
+```
+
+This checks module imports and Python syntax for `scripts/`.
+If auth env vars + `.spotify_cache` are present, it also runs one authenticated smoke call.
+
 For more on Spotify's OAuth flow, see: https://developer.spotify.com/documentation/web-api/tutorials/code-flow
 
 ### Required Scopes
@@ -558,6 +567,85 @@ except SpotifyException as e:
 
 ---
 
+## Memory (Play History)
+
+Spoticlaw can log your play history to a local JSON file for analysis.
+
+### Enable/Disable
+
+Set in `.env`:
+```
+MEMORY_ENABLED=false  # default
+MEMORY_ENABLED=true   # enable
+```
+
+### Usage
+
+```python
+from spoticlaw import memory_add_song, player
+
+# Manual add
+memory_add_song("spotify:track:...", source="manual")
+
+# Automatic: play() and add_to_queue() log automatically when successful
+player().play(uris=["spotify:track:..."])
+player().add_to_queue("spotify:track:...")
+```
+
+### Storage
+
+- Location (default): `~/.spoticlaw/music_memory.json`
+- Override via `.env`: `MEMORY_FILE_PATH=~/.spoticlaw/music_memory.json`
+- Format: `{"version": "1.0-simple-log", "profile": {...}, "plays": [...]}`
+
+---
+
+## Discovery (Last.fm)
+
+Spoticlaw integrates with Last.fm for music discovery and similarity (bypasses Spotify's deprecated endpoints).
+
+### Setup
+
+Get a free API key from https://www.last.fm/api/account/create and add to `.env`:
+
+```
+LASTFM_ENABLED=true
+LASTFM_API_KEY=your_api_key_here
+```
+
+If `LASTFM_ENABLED` is false or no API key is set, `discover_*` functions return an informative error and Spotify core controls still work.
+
+### Functions
+
+```python
+from spoticlaw import discover_similar_artists, discover_similar_tracks, discover_similar_genres
+
+# Similar artists (like "More like this")
+discover_similar_artists("Modest Mouse", limit=10)
+
+# Similar tracks
+discover_similar_tracks("Dramamine", limit=10)
+
+# Browse by genre
+discover_similar_genres("jazz", limit=10)
+```
+
+### Response Format
+
+```python
+{
+  "seed": {"name": "Modest Mouse", "tags": ["indie rock", "..."]},
+  "artists": [
+    {"name": "Built to Spill", "match": 0.81, "spotify_id": "...", "spotify_popularity": 55},
+    ...
+  ]
+}
+```
+
+All functions return Spotify IDs/URIs when found, for immediate playback.
+
+---
+
 ## API Limits
 
 - **Search:** max 10 results
@@ -578,4 +666,4 @@ except SpotifyException as e:
 ## More Info
 
 For setup, troubleshooting, and contributions:
-https://github.com/your-org/spoticlaw
+https://github.com/ledzgio/spoticlaw

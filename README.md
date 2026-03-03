@@ -110,11 +110,69 @@ python scripts/auth.py
 ```
 and copy the updated `.spotify_cache` to the agent skill folder.
 
+## Quick Self-Check (No Extra Dependencies)
+
+```bash
+python scripts/selfcheck.py
+```
+
+This validates module imports and Python syntax in `scripts/`.
+If auth env vars + `.spotify_cache` are present, it also runs one authenticated smoke call.
+
 ## Requirements
 
 - Python 3.8+
 - requests
 - python-dotenv
+
+## Memory (Play History)
+
+Memory is optional and disabled by default. Enable in `.env`:
+```bash
+MEMORY_ENABLED=false  # default
+MEMORY_ENABLED=true   # enable
+```
+
+```python
+from spoticlaw import memory_add_song, player
+
+# Manual add
+memory_add_song("spotify:track:...", source="manual")
+
+# Auto-logged on play/queue
+player().play(uris=["spotify:track:..."])
+player().add_to_queue("spotify:track:...")
+```
+
+Storage (default): `~/.spoticlaw/music_memory.json`
+
+You can override it in `.env`:
+```bash
+MEMORY_FILE_PATH=~/.spoticlaw/music_memory.json
+```
+
+## Discovery (Last.fm)
+
+Last.fm is optional and disabled by default. To enable, set both in `.env`:
+```bash
+LASTFM_ENABLED=true
+LASTFM_API_KEY=your_api_key
+```
+
+```python
+from spoticlaw import discover_similar_artists, discover_similar_tracks, discover_similar_genres
+
+# Similar artists
+discover_similar_artists("Modest Mouse", limit=10)
+
+# Similar tracks
+discover_similar_tracks("Dramamine", limit=10)
+
+# Browse by genre
+discover_similar_genres("jazz", limit=10)
+```
+
+All return Spotify IDs/URIs for immediate playback.
 
 ## License
 
