@@ -15,13 +15,15 @@ from typing import Any
 
 DEFAULT_MEMORY_PATH = Path.home() / ".spoticlaw" / "music_memory.json"
 
-# Feature flag: memory is disabled by default. Set to true to enable.
-MEMORY_ENABLED = os.environ.get("MEMORY_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+def memory_enabled() -> bool:
+    """Read memory feature flag at runtime (after dotenv may have loaded)."""
+    return os.environ.get("MEMORY_ENABLED", "false").lower() in ("1", "true", "yes", "on")
 
-# Optional path override for memory file.
-# Example: MEMORY_FILE_PATH=~/.spoticlaw/music_memory.json
-_MEMORY_FILE_PATH = os.environ.get("MEMORY_FILE_PATH", "").strip()
-MEMORY_PATH = Path(_MEMORY_FILE_PATH).expanduser() if _MEMORY_FILE_PATH else DEFAULT_MEMORY_PATH
+
+def memory_path() -> Path:
+    """Read memory path at runtime (after dotenv may have loaded)."""
+    raw = os.environ.get("MEMORY_FILE_PATH", "").strip()
+    return Path(raw).expanduser() if raw else DEFAULT_MEMORY_PATH
 
 
 def utc_now_iso() -> str:
@@ -44,7 +46,8 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def save_memory(memory: dict[str, Any], path: Path = MEMORY_PATH) -> None:
+def save_memory(memory: dict[str, Any], path: Path | None = None) -> None:
+    path = path or memory_path()
     _ensure_parent(path)
     profile = memory.setdefault("profile", {})
     profile["updated_at"] = utc_now_iso()
@@ -162,7 +165,8 @@ def _normalize_memory_shape(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def load_memory(path: Path = MEMORY_PATH) -> dict[str, Any]:
+def load_memory(path: Path | None = None) -> dict[str, Any]:
+    path = path or memory_path()
     try:
         if not path.exists():
             mem = default_memory()
@@ -201,7 +205,7 @@ def record_play(
     user_rating: int | None = None,
     mood_tags: list[str] | None = None,
 ) -> None:
-    if not MEMORY_ENABLED or not track_uri:
+    if not memory_enabled() or not track_uri:
         return
 
     now = utc_now_iso()

@@ -15,6 +15,10 @@ from typing import Any, Optional
 import requests
 from dotenv import load_dotenv
 
+# Load .env early so imported modules see env-backed flags/keys.
+_env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(_env_path)
+
 try:
     from .memory import load_memory, save_memory, record_play, set_track_feedback, get_recent_plays, get_all_genres, get_history_artists
 except Exception:
@@ -28,10 +32,6 @@ except Exception:
     except Exception:
         _lfm_similar = None
         _lfm_tags = None
-
-# Load .env
-_env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(_env_path)
 
 # Configuration
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
