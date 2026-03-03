@@ -41,6 +41,9 @@ CACHE_PATH = os.getenv("SPOTIFY_CACHE_PATH", ".spotify_cache")
 
 BASE_URL = "https://api.spotify.com/v1"
 
+# Optional features are disabled by default unless explicitly enabled in .env
+LASTFM_ENABLED = os.getenv("LASTFM_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+
 
 class SpotifyException(Exception):
     """Spotify API exception."""
@@ -79,8 +82,8 @@ def _memory_record_play_safe(
             source=source,
         )
         
-        # Enrich with Last.fm if available and artist is known
-        if enrich and _lfm_tags and artist_name:
+        # Enrich with Last.fm only when explicitly enabled and artist is known
+        if enrich and LASTFM_ENABLED and _lfm_tags and artist_name:
             try:
                 tags_result = _lfm_tags(artist_name)
                 tags = [t.get("name") for t in tags_result.get("tags", [])[:5]]
@@ -451,10 +454,25 @@ class Player:
         params = f"?device_id={device_id}" if device_id else ""
         out = put(f"/me/player/play{params}", **payload)
 
-        # best-effort memory log for direct-track play calls
+        # best-effort memory log for direct-track play calls (only if we got track details)
         try:
             if uris and len(uris) > 0:
-                _memory_record_play_safe(track_uri=uris[0], source="play")
+                track_uri = uris[0]
+                track_name = None
+                artist_name = None
+                if track_uri.startswith("spotify:track:"):
+                    tid = track_uri.split(":")[-1]
+                    try:
+                        t = tracks().get(tid)
+                        track_name = t.get("name")
+                        artists = t.get("artists") or []
+                        if artists:
+                            artist_name = artists[0].get("name")
+                    except Exception:
+                        pass
+                # Only log if we got track details
+                if track_name and artist_name:
+                    _memory_record_play_safe(track_uri=track_uri, track_name=track_name, artist_name=artist_name, source="play")
         except Exception:
             pass
 
@@ -527,7 +545,22 @@ class Player:
             resp = requests.post(url, headers=_headers())
         
         if resp.status_code == 204 or resp.status_code == 200:
-            _memory_record_play_safe(track_uri=uri, source="add_to_queue")
+            # Try to get track details for enrichment (only log if we got them)
+            track_name = None
+            artist_name = None
+            if uri.startswith("spotify:track:"):
+                tid = uri.split(":")[-1]
+                try:
+                    t = tracks().get(tid)
+                    track_name = t.get("name")
+                    artists = t.get("artists") or []
+                    if artists:
+                        artist_name = artists[0].get("name")
+                except Exception:
+                    pass
+            # Only log if we got track details
+            if track_name and artist_name:
+                _memory_record_play_safe(track_uri=uri, track_name=track_name, artist_name=artist_name, source="add_to_queue")
             return {}
         if resp.status_code not in (200, 201):
             raise SpotifyException(f"add_to_queue: {resp.status_code} - {resp.text}")
@@ -854,6 +887,8 @@ def discover_similar_artists(seed_artist: str, limit: int = 10) -> dict:
     Returns:
         {"seed": {...}, "artists": [...]}
     """
+    if not LASTFM_ENABLED:
+        return {"seed": None, "artists": [], "reason": "LASTFM is disabled (set LASTFM_ENABLED=true)"}
     if not _lfm_similar:
         return {"seed": None, "artists": [], "reason": "LASTFM_API_KEY not configured"}
 
@@ -926,6 +961,8 @@ def discover_similar_tracks(seed_track: str | None = None, limit: int = 20) -> d
     Returns:
         {"seed": {...}, "tracks": [...]}
     """
+    if not LASTFM_ENABLED:
+        return {"seed": None, "tracks": [], "reason": "LASTFM is disabled (set LASTFM_ENABLED=true)"}
     if not _lfm_similar:
         return {"seed": None, "tracks": [], "reason": "LASTFM_API_KEY not configured"}
 
@@ -1014,6 +1051,8 @@ def discover_similar_genres(genre: str, limit: int = 20) -> dict:
     Returns:
         {"genre": "...", "artists": [...]}
     """
+    if not LASTFM_ENABLED:
+        return {"genre": genre, "artists": [], "reason": "LASTFM is disabled (set LASTFM_ENABLED=true)"}
     try:
         from . import lastfm as _lastfm_mod
     except Exception:
@@ -1031,7 +1070,7 @@ def get_history_genres(limit: int = 10) -> dict:
 
     Requires:
     - MEMORY_ENABLED=true in .env
-    - LASTFM_API_KEY configured (for auto-enrichment)
+    - LASTFM_ENABLED=true and LASTFM_API_KEY configured (for auto-enrichment)
 
     Returns:
         {"genres": [{"tag": "indie rock", "count": 15}, ...]}
@@ -1051,11 +1090,13 @@ def discover_from_history(limit: int = 10) -> dict:
 
     Requires:
     - MEMORY_ENABLED=true in .env
-    - LASTFM_API_KEY configured
+    - LASTFM_ENABLED=true and LASTFM_API_KEY configured
 
     Returns:
         {"seed": {"top_artists": [...]}, "suggested": [...]}
     """
+    if not LASTFM_ENABLED:
+        return {"suggested": [], "reason": "LASTFM is disabled (set LASTFM_ENABLED=true)"}
     if not _lfm_similar:
         return {"suggested": [], "reason": "LASTFM_API_KEY not configured"}
 

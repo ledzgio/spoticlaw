@@ -13,7 +13,7 @@ Usage:
     3. Authorize the app
     4. Copy .spotify_cache file to your agent's folder:
        - Linux/Mac: cp .spotify_cache /path/to/agent/skills/spoticlaw/
-       - Windows: copy .spotify_cache C:\path\to\agent\skills\spoticlaw\
+       - Windows: copy .spotify_cache C:\\path\\to\\agent\\skills\\spoticlaw\\
 
 For remote agents: run auth locally, then copy the cache file over.
 """
@@ -138,6 +138,6 @@ def get_token():
 if __name__ == "__main__":
     if not CLIENT_ID or not CLIENT_SECRET:
         print("Error: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET not set in .env")
-        print("See: https://github.com/your-repo/spoticlaw#setup")
+        print("See: https://github.com/ledzgio/spoticlaw#setup")
     else:
         get_token()

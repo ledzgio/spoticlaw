@@ -110,6 +110,15 @@ python scripts/auth.py
 ```
 and copy the updated `.spotify_cache` to the agent skill folder.
 
+## Quick Self-Check (No Extra Dependencies)
+
+```bash
+python scripts/selfcheck.py
+```
+
+This validates module imports and Python syntax in `scripts/`.
+If auth env vars + `.spotify_cache` are present, it also runs one authenticated smoke call.
+
 ## Requirements
 
 - Python 3.8+
@@ -118,10 +127,10 @@ and copy the updated `.spotify_cache` to the agent skill folder.
 
 ## Memory (Play History)
 
-Enable/disable in `.env`:
+Memory is optional and disabled by default. Enable in `.env`:
 ```bash
-MEMORY_ENABLED=true  # default
-MEMORY_ENABLED=false  # disable
+MEMORY_ENABLED=false  # default
+MEMORY_ENABLED=true   # enable
 ```
 
 ```python
@@ -135,12 +144,18 @@ player().play(uris=["spotify:track:..."])
 player().add_to_queue("spotify:track:...")
 ```
 
-Storage: `~/.spoticlaw/music_memory.json`
+Storage (default): `~/.spoticlaw/music_memory.json`
+
+You can override it in `.env`:
+```bash
+MEMORY_FILE_PATH=~/.spoticlaw/music_memory.json
+```
 
 ## Discovery (Last.fm)
 
-Get a free API key from https://www.last.fm/api/account/create and add to `.env`:
+Last.fm is optional and disabled by default. To enable, set both in `.env`:
 ```bash
+LASTFM_ENABLED=true
 LASTFM_API_KEY=your_api_key
 ```
 

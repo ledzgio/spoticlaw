@@ -100,6 +100,15 @@ The library automatically handles token refresh **only if the agent has the same
 - If `.spotify_cache` exists but `.env` is missing/mismatched, refresh fails (`invalid_client`)
 - If you get an error, run `python auth.py` locally again and copy updated `.spotify_cache`
 
+### Quick self-check (no extra dependencies)
+
+```bash
+python scripts/selfcheck.py
+```
+
+This checks module imports and Python syntax for `scripts/`.
+If auth env vars + `.spotify_cache` are present, it also runs one authenticated smoke call.
+
 For more on Spotify's OAuth flow, see: https://developer.spotify.com/documentation/web-api/tutorials/code-flow
 
 ### Required Scopes
@@ -566,8 +575,8 @@ Spoticlaw can log your play history to a local JSON file for analysis.
 
 Set in `.env`:
 ```
-MEMORY_ENABLED=true  # default
-MEMORY_ENABLED=false  # disable
+MEMORY_ENABLED=false  # default
+MEMORY_ENABLED=true   # enable
 ```
 
 ### Usage
@@ -585,7 +594,8 @@ player().add_to_queue("spotify:track:...")
 
 ### Storage
 
-- Location: `~/.spoticlaw/music_memory.json`
+- Location (default): `~/.spoticlaw/music_memory.json`
+- Override via `.env`: `MEMORY_FILE_PATH=~/.spoticlaw/music_memory.json`
 - Format: `{"version": "1.0-simple-log", "profile": {...}, "plays": [...]}`
 
 ---
@@ -599,10 +609,11 @@ Spoticlaw integrates with Last.fm for music discovery and similarity (bypasses S
 Get a free API key from https://www.last.fm/api/account/create and add to `.env`:
 
 ```
+LASTFM_ENABLED=true
 LASTFM_API_KEY=your_api_key_here
 ```
 
-If not set, `discover_*` functions will return an error.
+If `LASTFM_ENABLED` is false or no API key is set, `discover_*` functions return an informative error and Spotify core controls still work.
 
 ### Functions
 
@@ -655,4 +666,4 @@ All functions return Spotify IDs/URIs when found, for immediate playback.
 ## More Info
 
 For setup, troubleshooting, and contributions:
-https://github.com/your-org/spoticlaw
+https://github.com/ledzgio/spoticlaw

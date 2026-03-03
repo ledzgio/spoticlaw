@@ -10,8 +10,13 @@ from typing import Any
 
 DEFAULT_MEMORY_PATH = Path.home() / ".spoticlaw" / "music_memory.json"
 
-# Feature flag: set to "false" to disable memory logging
-MEMORY_ENABLED = os.environ.get("MEMORY_ENABLED", "true").lower() != "false"
+# Feature flag: memory is disabled by default. Set to true to enable.
+MEMORY_ENABLED = os.environ.get("MEMORY_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+
+# Optional path override for memory file.
+# Example: MEMORY_FILE_PATH=~/.spoticlaw/music_memory.json
+_MEMORY_FILE_PATH = os.environ.get("MEMORY_FILE_PATH", "").strip()
+MEMORY_PATH = Path(_MEMORY_FILE_PATH).expanduser() if _MEMORY_FILE_PATH else DEFAULT_MEMORY_PATH
 
 
 def utc_now_iso() -> str:
@@ -34,7 +39,7 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def save_memory(memory: dict[str, Any], path: Path = DEFAULT_MEMORY_PATH) -> None:
+def save_memory(memory: dict[str, Any], path: Path = MEMORY_PATH) -> None:
     _ensure_parent(path)
     profile = memory.setdefault("profile", {})
     profile["updated_at"] = utc_now_iso()
@@ -64,6 +69,9 @@ def _normalize_memory_shape(data: dict[str, Any]) -> dict[str, Any]:
                         "track_name": p.get("track_name") or "",
                         "artist_name": p.get("artist_name") or "",
                         "album_name": p.get("album_name") or "",
+                        # Preserve enrichment fields from Last.fm
+                        "lastfm_tags": p.get("lastfm_tags") or [],
+                        "similar_artists": p.get("similar_artists") or [],
                     }
                 )
 
@@ -96,7 +104,7 @@ def _normalize_memory_shape(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def load_memory(path: Path = DEFAULT_MEMORY_PATH) -> dict[str, Any]:
+def load_memory(path: Path = MEMORY_PATH) -> dict[str, Any]:
     try:
         if not path.exists():
             mem = default_memory()
