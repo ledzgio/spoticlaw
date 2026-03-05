@@ -22,6 +22,8 @@ from .spoticlaw import (
     discover_similar_genres,
     get_history_genres,
     discover_from_history,
+    get_lyrics,
+    get_current_track_lyrics,
 )
 
 __all__ = [
@@ -46,4 +48,6 @@ __all__ = [
     "discover_similar_genres",
     "get_history_genres",
     "discover_from_history",
+    "get_lyrics",
+    "get_current_track_lyrics",
 ]

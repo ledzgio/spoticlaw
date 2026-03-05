@@ -609,6 +609,39 @@ player().add_to_queue("spotify:track:...")
 
 ---
 
+## Lyrics (LRCLIB, Manual-Only)
+
+LRCLIB integration is optional and disabled by default. It does **not** require an API key.
+
+Set in `.env`:
+```bash
+LRCLIB_ENABLED=true
+LRCLIB_BASE_URL=https://lrclib.net
+```
+
+Use manually (no automation):
+
+```python
+from spoticlaw import get_current_track_lyrics, get_lyrics
+
+# Current playing track
+get_current_track_lyrics()
+
+# Explicit metadata
+get_lyrics(
+    track_name="Yellow",
+    artist_name="Coldplay",
+    album_name="Yellow - Single",  # optional
+    duration_sec=267,                # optional
+)
+```
+
+Behavior:
+- Tries `GET /api/get`
+- Falls back to `GET /api/search`
+- Returns top result including `plainLyrics` and/or `syncedLyrics` when available
+- Runs only when called by user/request (manual-only mode)
+
 ## Discovery (Last.fm)
 
 Spoticlaw integrates with Last.fm for music discovery and similarity (bypasses Spotify's deprecated endpoints).

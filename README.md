@@ -161,6 +161,38 @@ You can override it in `.env`:
 MEMORY_FILE_PATH=~/.spoticlaw/music_memory.json
 ```
 
+## Lyrics (LRCLIB, Manual-Only)
+
+LRCLIB integration is optional and disabled by default. It does **not** require an API key.
+
+Enable in `.env`:
+```bash
+LRCLIB_ENABLED=true
+LRCLIB_BASE_URL=https://lrclib.net
+```
+
+Manual-only functions:
+```python
+from spoticlaw import get_current_track_lyrics, get_lyrics
+
+# 1) Lyrics for currently playing track
+get_current_track_lyrics()
+
+# 2) Lyrics by explicit metadata
+get_lyrics(
+    track_name="Yellow",
+    artist_name="Coldplay",
+    album_name="Yellow - Single",   # optional
+    duration_sec=267,                 # optional
+)
+```
+
+Behavior:
+- First tries `GET /api/get`
+- Falls back to `GET /api/search`
+- Returns first best candidate with `plainLyrics` and/or `syncedLyrics` when available
+- No automatic background fetching (only runs when you call the function)
+
 ## Discovery (Last.fm)
 
 Last.fm is optional and disabled by default. To enable, set both in `.env`:

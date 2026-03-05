@@ -43,6 +43,8 @@ BASE_URL = "https://api.spotify.com/v1"
 
 # Optional features are disabled by default unless explicitly enabled in .env
 LASTFM_ENABLED = os.getenv("LASTFM_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+LRCLIB_ENABLED = os.getenv("LRCLIB_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+LRCLIB_BASE_URL = os.getenv("LRCLIB_BASE_URL", "https://lrclib.net").rstrip("/")
 
 
 class SpotifyException(Exception):
@@ -1117,19 +1119,19 @@ def discover_from_history(limit: int = 10) -> dict:
 
     try:
         mem = load_memory()
-        
+
         # Get most played artists from history
         artist_plays = get_history_artists(mem)
         if not artist_plays:
             return {"suggested": [], "reason": "No play history found"}
-        
+
         # Take top artists by play count
         top_artists = [a["artist"] for a in artist_plays[:5]]
-        
+
         # For each top artist, get similar from Last.fm
         all_similar = []
         seen = set()
-        
+
         for artist_name in top_artists:
             try:
                 result = _lfm_similar(artist_name, limit=5)
@@ -1155,13 +1157,109 @@ def discover_from_history(limit: int = 10) -> dict:
                         })
             except Exception:
                 continue
-        
+
         # Sort by match score
         all_similar.sort(key=lambda x: float(x.get("match", 0)), reverse=True)
-        
+
         return {
             "seed": {"top_artists": top_artists},
             "suggested": all_similar[:limit],
         }
     except Exception as e:
         return {"suggested": [], "error": str(e)}
+
+
+def get_lyrics(
+    track_name: str,
+    artist_name: str,
+    album_name: str | None = None,
+    duration_sec: int | None = None,
+) -> dict:
+    """Manual-only LRCLIB lookup by explicit metadata.
+
+    Requires LRCLIB_ENABLED=true in .env.
+    """
+    if not LRCLIB_ENABLED:
+        return {"ok": False, "reason": "LRCLIB is disabled (set LRCLIB_ENABLED=true)"}
+
+    if not track_name or not artist_name:
+        return {"ok": False, "reason": "track_name and artist_name are required"}
+
+    # 1) Exact-ish lookup
+    params: dict[str, Any] = {
+        "track_name": track_name,
+        "artist_name": artist_name,
+    }
+    if album_name:
+        params["album_name"] = album_name
+    if duration_sec and duration_sec > 0:
+        params["duration"] = int(duration_sec)
+
+    try:
+        resp = requests.get(f"{LRCLIB_BASE_URL}/api/get", params=params, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return {
+                "ok": True,
+                "mode": "get",
+                "lyrics": data,
+            }
+    except Exception as e:
+        return {"ok": False, "reason": f"LRCLIB get failed: {e}"}
+
+    # 2) Fallback search
+    query = f"{artist_name} {track_name}".strip()
+    try:
+        resp = requests.get(f"{LRCLIB_BASE_URL}/api/search", params={"q": query}, timeout=10)
+        if resp.status_code != 200:
+            return {"ok": False, "reason": f"LRCLIB search failed: HTTP {resp.status_code}"}
+
+        hits = resp.json() if resp.text else []
+        if not hits:
+            return {"ok": False, "reason": "No lyrics found"}
+
+        return {
+            "ok": True,
+            "mode": "search",
+            "lyrics": hits[0],
+            "candidates": len(hits),
+        }
+    except Exception as e:
+        return {"ok": False, "reason": f"LRCLIB search failed: {e}"}
+
+
+def get_current_track_lyrics() -> dict:
+    """Manual-only LRCLIB lookup for the currently playing Spotify track."""
+    if not LRCLIB_ENABLED:
+        return {"ok": False, "reason": "LRCLIB is disabled (set LRCLIB_ENABLED=true)"}
+
+    try:
+        current = player().get_currently_playing()
+    except Exception as e:
+        return {"ok": False, "reason": f"Spotify error: {e}"}
+
+    item = (current or {}).get("item")
+    if not item:
+        return {"ok": False, "reason": "No currently playing track"}
+
+    artists = item.get("artists") or []
+    artist_name = artists[0].get("name") if artists else ""
+    track_name = item.get("name") or ""
+    album_name = (item.get("album") or {}).get("name")
+    duration_ms = item.get("duration_ms")
+    duration_sec = int(round(duration_ms / 1000)) if duration_ms else None
+
+    out = get_lyrics(
+        track_name=track_name,
+        artist_name=artist_name,
+        album_name=album_name,
+        duration_sec=duration_sec,
+    )
+    out["track"] = {
+        "track_name": track_name,
+        "artist_name": artist_name,
+        "album_name": album_name,
+        "duration_sec": duration_sec,
+        "progress_sec": int(round((current.get("progress_ms") or 0) / 1000)),
+    }
+    return out
