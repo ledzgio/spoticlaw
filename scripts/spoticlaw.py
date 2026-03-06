@@ -1204,6 +1204,11 @@ def get_lyrics(
     """Manual-only LRCLIB lookup by explicit metadata.
 
     Requires LRCLIB_ENABLED=true in .env.
+
+    Lookup strategy:
+    1) /api/get with full params (track+artist+optional album/duration)
+    2) /api/get retry with minimal params (track+artist only)
+    3) /api/search fallback
     """
     if not LRCLIB_ENABLED:
         return {"ok": False, "reason": "LRCLIB is disabled (set LRCLIB_ENABLED=true)"}
@@ -1211,38 +1216,85 @@ def get_lyrics(
     if not track_name or not artist_name:
         return {"ok": False, "reason": "track_name and artist_name are required"}
 
-    # 1) Exact-ish lookup
-    params: dict[str, Any] = {
+    def _has_lyrics(payload: dict[str, Any] | None) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        plain = payload.get("plainLyrics")
+        synced = payload.get("syncedLyrics")
+        return bool((isinstance(plain, str) and plain.strip()) or (isinstance(synced, str) and synced.strip()))
+
+    full_params: dict[str, Any] = {
         "track_name": track_name,
         "artist_name": artist_name,
     }
     if album_name:
-        params["album_name"] = album_name
+        full_params["album_name"] = album_name
     if duration_sec and duration_sec > 0:
-        params["duration"] = int(duration_sec)
+        full_params["duration"] = int(duration_sec)
 
+    minimal_params: dict[str, Any] = {
+        "track_name": track_name,
+        "artist_name": artist_name,
+    }
+
+    # 1) /api/get with full params
+    full_get_error: str | None = None
     try:
-        resp = requests.get(f"{LRCLIB_BASE_URL}/api/get", params=params, timeout=10)
+        resp = requests.get(f"{LRCLIB_BASE_URL}/api/get", params=full_params, timeout=10)
         if resp.status_code == 200:
-            data = resp.json()
-            return {
-                "ok": True,
-                "mode": "get",
-                "lyrics": data,
-            }
+            data = resp.json() if resp.text else {}
+            if _has_lyrics(data):
+                return {
+                    "ok": True,
+                    "mode": "get",
+                    "lyrics": data,
+                }
+        else:
+            full_get_error = f"HTTP {resp.status_code}"
     except Exception as e:
-        return {"ok": False, "reason": f"LRCLIB get failed: {e}"}
+        full_get_error = str(e)
 
-    # 2) Fallback search
+    # 2) /api/get retry with minimal params (track+artist only)
+    minimal_get_error: str | None = None
+    try:
+        resp = requests.get(f"{LRCLIB_BASE_URL}/api/get", params=minimal_params, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json() if resp.text else {}
+            if _has_lyrics(data):
+                return {
+                    "ok": True,
+                    "mode": "get-minimal",
+                    "lyrics": data,
+                }
+        else:
+            minimal_get_error = f"HTTP {resp.status_code}"
+    except Exception as e:
+        minimal_get_error = str(e)
+
+    # 3) Fallback search
     query = f"{artist_name} {track_name}".strip()
     try:
         resp = requests.get(f"{LRCLIB_BASE_URL}/api/search", params={"q": query}, timeout=10)
         if resp.status_code != 200:
-            return {"ok": False, "reason": f"LRCLIB search failed: HTTP {resp.status_code}"}
+            return {
+                "ok": False,
+                "reason": f"LRCLIB search failed: HTTP {resp.status_code}",
+                "debug": {
+                    "get_full_error": full_get_error,
+                    "get_minimal_error": minimal_get_error,
+                },
+            }
 
         hits = resp.json() if resp.text else []
         if not hits:
-            return {"ok": False, "reason": "No lyrics found"}
+            return {
+                "ok": False,
+                "reason": "No lyrics found",
+                "debug": {
+                    "get_full_error": full_get_error,
+                    "get_minimal_error": minimal_get_error,
+                },
+            }
 
         return {
             "ok": True,
@@ -1251,7 +1303,14 @@ def get_lyrics(
             "candidates": len(hits),
         }
     except Exception as e:
-        return {"ok": False, "reason": f"LRCLIB search failed: {e}"}
+        return {
+            "ok": False,
+            "reason": f"LRCLIB search failed: {e}",
+            "debug": {
+                "get_full_error": full_get_error,
+                "get_minimal_error": minimal_get_error,
+            },
+        }
 
 
 def get_current_track_lyrics() -> dict:
