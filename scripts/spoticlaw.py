@@ -610,6 +610,11 @@ class Tracks:
         """Get multiple tracks."""
         return get("/tracks", ids=",".join(ids))
 
+    @staticmethod
+    def get_saved(limit: int = 20, offset: int = 0) -> dict:
+        """Get user's saved tracks."""
+        return get("/me/tracks", limit=limit, offset=offset)
+
 
 # ============================================================================
 # Artist Endpoints
@@ -661,6 +666,11 @@ class Albums:
         """Get album tracks."""
         return get(f"/albums/{album_id}/tracks", limit=limit, offset=offset)
 
+    @staticmethod
+    def get_saved(limit: int = 20, offset: int = 0) -> dict:
+        """Get user's saved albums."""
+        return get("/me/albums", limit=limit, offset=offset)
+
 
 # ============================================================================
 # Show Endpoints (Podcasts)
@@ -684,6 +694,11 @@ class Shows:
         """Get show episodes."""
         return get(f"/shows/{show_id}/episodes", limit=limit, offset=offset)
 
+    @staticmethod
+    def get_saved(limit: int = 20, offset: int = 0) -> dict:
+        """Get user's saved shows."""
+        return get("/me/shows", limit=limit, offset=offset)
+
 
 # ============================================================================
 # Episode Endpoints (Podcasts)
@@ -701,6 +716,11 @@ class Episodes:
     def get_multiple(ids: list[str]) -> dict:
         """Get multiple episodes."""
         return get("/episodes", ids=",".join(ids))
+
+    @staticmethod
+    def get_saved(limit: int = 20, offset: int = 0) -> dict:
+        """Get user's saved episodes."""
+        return get("/me/episodes", limit=limit, offset=offset)
 
 
 # ============================================================================
@@ -724,6 +744,11 @@ class Audiobooks:
     def get_chapters(audiobook_id: str, limit: int = 50, offset: int = 0) -> dict:
         """Get audiobook chapters."""
         return get(f"/audiobooks/{audiobook_id}/chapters", limit=limit, offset=offset)
+
+    @staticmethod
+    def get_saved(limit: int = 20, offset: int = 0) -> dict:
+        """Get user's saved audiobooks."""
+        return get("/me/audiobooks", limit=limit, offset=offset)
 
 
 # ============================================================================

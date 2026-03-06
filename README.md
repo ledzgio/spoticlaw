@@ -96,7 +96,23 @@ playlists().add_items("playlist_id", ["spotify:track:..."])
 
 # Library
 library().save(["spotify:track:..."])
+
+# Saved items (read)
+albums().get_saved(limit=20)
+tracks().get_saved(limit=20)
+shows().get_saved(limit=20)
+episodes().get_saved(limit=20)
+audiobooks().get_saved(limit=20)
 ```
+
+## Endpoint Coverage Notes
+
+SpotiClaw supports saved-items read endpoints via:
+- `albums().get_saved()` -> `GET /me/albums`
+- `tracks().get_saved()` -> `GET /me/tracks`
+- `shows().get_saved()` -> `GET /me/shows`
+- `episodes().get_saved()` -> `GET /me/episodes`
+- `audiobooks().get_saved()` -> `GET /me/audiobooks`
 
 ## Token Refresh
 

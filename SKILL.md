@@ -337,6 +337,18 @@ from spoticlaw import follow
 follow().get_followed(limit=50)  # Get followed artists
 ```
 
+### Saved Items (Read)
+
+```python
+from spoticlaw import albums, tracks, shows, episodes, audiobooks
+
+albums().get_saved(limit=20)      # GET /me/albums
+tracks().get_saved(limit=20)      # GET /me/tracks
+shows().get_saved(limit=20)       # GET /me/shows
+episodes().get_saved(limit=20)    # GET /me/episodes
+audiobooks().get_saved(limit=20)  # GET /me/audiobooks
+```
+
 ---
 
 ## Composite Workflows
