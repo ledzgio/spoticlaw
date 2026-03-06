@@ -364,8 +364,8 @@ class Playlists:
     @staticmethod
     def remove_items(playlist_id: str, uris: list[str], snapshot_id: str = None) -> dict:
         """Remove items from playlist."""
-        tracks = [{"uri": uri} for uri in uris]
-        payload = {"tracks": tracks}
+        items = [{"uri": uri} for uri in uris]
+        payload = {"items": items}
         if snapshot_id:
             payload["snapshot_id"] = snapshot_id
         return delete(f"/playlists/{playlist_id}/items", **payload)
