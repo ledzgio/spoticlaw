@@ -203,12 +203,13 @@ def _headers() -> dict:
 def get(endpoint: str, **params) -> dict:
     """GET request to Spotify API."""
     url = f"{BASE_URL}{endpoint}"
-    resp = requests.get(url, headers=_headers(), params=params)
+    clean_params = {k: v for k, v in params.items() if v is not None}
+    resp = requests.get(url, headers=_headers(), params=clean_params)
     
     # If unauthorized, try refreshing token once
     if resp.status_code == 401:
         _refresh_token()
-        resp = requests.get(url, headers=_headers(), params=params)
+        resp = requests.get(url, headers=_headers(), params=clean_params)
     
     if resp.status_code == 204:
         return {}  # No content
@@ -530,18 +531,18 @@ class Player:
     @staticmethod
     def add_to_queue(uri: str, device_id: str = None) -> dict:
         """Add item to queue."""
-        params = f"uri={uri}"
+        params = {"uri": uri}
         if device_id:
-            params += f"&device_id={device_id}"
-        
+            params["device_id"] = device_id
+
         # Queue endpoint returns 204 with empty body - use direct request
-        url = f"{BASE_URL}/me/player/queue?{params}"
-        resp = requests.post(url, headers=_headers())
-        
+        url = f"{BASE_URL}/me/player/queue"
+        resp = requests.post(url, headers=_headers(), params=params)
+
         # If unauthorized, try refreshing token once
         if resp.status_code == 401:
             _refresh_token()
-            resp = requests.post(url, headers=_headers())
+            resp = requests.post(url, headers=_headers(), params=params)
         
         if resp.status_code == 204 or resp.status_code == 200:
             # Try to get track details for enrichment (only log if we got them)
